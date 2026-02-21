@@ -156,7 +156,7 @@ with tab1:
                     submitted = st.form_submit_button("Save Cigar", type="primary")
                     if submitted:
                         new_cigar = {
-                            "id": len(data["cigars"]) + 1,
+                            "id": int(date.today().strftime("%Y%m%d%H%M%S") + str(len(data["cigars"]))),
                             "brand": st.session_state.lookup_brand,
                             "name": st.session_state.lookup_name,
                             "vitola": vitola, "wrapper": wrapper,
