@@ -84,7 +84,7 @@ if "data" not in st.session_state:
 data = st.session_state.data
 
 # ── Header ────────────────────────────────────────────────────────────────────
-st.title("🚬 Humidor")
+st.title("🥃 Humidor")
 st.caption("Your personal cigar journal")
 st.divider()
 
