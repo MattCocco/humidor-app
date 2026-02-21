@@ -1,11 +1,31 @@
 import streamlit as st
-import json
-import os
 from datetime import date
 import anthropic
+from supabase import create_client
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Humidor", page_icon="🥃", layout="centered")
+
+# ── Supabase client ───────────────────────────────────────────────────────────
+@st.cache_resource
+def get_supabase():
+    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+
+supabase = get_supabase()
+
+# ── Data helpers ──────────────────────────────────────────────────────────────
+def load_cigars():
+    res = supabase.table("cigars").select("*").order("id").execute()
+    return res.data or []
+
+def add_cigar(cigar):
+    supabase.table("cigars").insert(cigar).execute()
+
+def update_cigar(cid, updates):
+    supabase.table("cigars").update(updates).eq("id", cid).execute()
+
+def delete_cigar(cid):
+    supabase.table("cigars").delete().eq("id", cid).execute()
 
 # ── Password / session state ──────────────────────────────────────────────────
 if "authenticated" not in st.session_state:
@@ -34,27 +54,9 @@ def check_password():
 check_password()
 is_admin = st.session_state.authenticated
 
-# ── Data helpers ──────────────────────────────────────────────────────────────
-DATA_FILE = "data.json"
-
-def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
-    return {"cigars": []}
-
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
-def get_cigar_index(data, cigar_id):
-    for i, c in enumerate(data["cigars"]):
-        if c["id"] == cigar_id:
-            return i
-    return None
-
 # ── Claude AI helper ──────────────────────────────────────────────────────────
 def lookup_cigar(brand, name):
+    import json
     client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
     prompt = f"""I have a cigar: Brand: {brand}, Name/Line: {name}
 
@@ -93,12 +95,6 @@ def format_rating(rating):
     full = int(rating)
     half = rating - full >= 0.5
     return "⭐" * full + ("½" if half else "")
-
-# ── Load data ─────────────────────────────────────────────────────────────────
-if "data" not in st.session_state:
-    st.session_state.data = load_data()
-
-data = st.session_state.data
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.title("🥃 Humidor")
@@ -156,19 +152,17 @@ with tab1:
                     submitted = st.form_submit_button("Save Cigar", type="primary")
                     if submitted:
                         new_cigar = {
-                            "id": int(date.today().strftime("%Y%m%d%H%M%S") + str(len(data["cigars"]))),
                             "brand": st.session_state.lookup_brand,
                             "name": st.session_state.lookup_name,
                             "vitola": vitola, "wrapper": wrapper,
                             "origin": origin, "strength": strength,
-                            "qty": qty, "price": price, "notes": notes,
+                            "qty": int(qty), "price": float(price),
+                            "notes": notes, "comments": "",
                             "purchase_date": str(purchase_date),
-                            "smoked": False, "rating": 0,
-                            "smoked_date": "", "comments": "",
-                            "favorite": False
+                            "smoked": False, "rating": 0.0,
+                            "smoked_date": "", "favorite": False
                         }
-                        data["cigars"].append(new_cigar)
-                        save_data(data)
+                        add_cigar(new_cigar)
                         del st.session_state.lookup_result
                         st.success(f"Added {st.session_state.lookup_brand} {st.session_state.lookup_name}!")
                         st.rerun()
@@ -179,7 +173,7 @@ with tab1:
     filter_opt = st.radio("Show", ["All", "In Humidor", "Smoked", "Favorites"], horizontal=True)
     search = st.text_input("Search", placeholder="Search by brand or name…")
 
-    cigars = data["cigars"]
+    cigars = load_cigars()
     if filter_opt == "In Humidor":
         cigars = [c for c in cigars if not c["smoked"]]
     elif filter_opt == "Smoked":
@@ -197,32 +191,24 @@ with tab1:
             is_expanded = st.session_state.expanded_id == cid
             is_smoking  = st.session_state.smoking_id == cid
 
-            # ── Cigar row ──
             with st.container(border=True):
                 col1, col2, col3 = st.columns([0.08, 3.5, 1])
 
-                # Favorite heart
                 with col1:
                     heart = "❤️" if cigar.get("favorite") else "🤍"
                     if is_admin:
                         if st.button(heart, key=f"fav_{cid}", help="Toggle favorite"):
-                            idx = get_cigar_index(data, cid)
-                            data["cigars"][idx]["favorite"] = not cigar.get("favorite", False)
-                            save_data(data)
+                            update_cigar(cid, {"favorite": not cigar.get("favorite", False)})
                             st.rerun()
                     else:
                         st.write(heart)
 
-                # Cigar info
                 with col2:
-                    name_label = f"**{cigar['brand']} {cigar['name']}**"
-                    detail_line = f"{cigar['vitola']} · {cigar['origin']} · {cigar['wrapper']} · {cigar['strength']}"
-                    st.markdown(name_label)
-                    st.caption(detail_line)
+                    st.markdown(f"**{cigar['brand']} {cigar['name']}**")
+                    st.caption(f"{cigar['vitola']} · {cigar['origin']} · {cigar['wrapper']} · {cigar['strength']}")
                     if cigar["smoked"] and cigar.get("rating"):
                         st.caption(f"{format_rating(cigar['rating'])} · Smoked {cigar['smoked_date']}")
 
-                # Expand toggle
                 with col3:
                     expand_label = "▲ Less" if is_expanded else "▼ Details"
                     if st.button(expand_label, key=f"exp_{cid}"):
@@ -230,7 +216,6 @@ with tab1:
                         st.session_state.smoking_id = None
                         st.rerun()
 
-                # ── Expanded detail panel ──
                 if is_expanded:
                     st.divider()
                     if cigar.get("notes"):
@@ -253,21 +238,19 @@ with tab1:
                                     st.rerun()
                             else:
                                 if st.button("↩️ Unmark Smoked", key=f"unsmoke_{cid}"):
-                                    idx = get_cigar_index(data, cid)
-                                    data["cigars"][idx]["smoked"] = False
-                                    data["cigars"][idx]["smoked_date"] = ""
-                                    data["cigars"][idx]["rating"] = 0
-                                    data["cigars"][idx]["comments"] = ""
-                                    save_data(data)
+                                    update_cigar(cid, {
+                                        "smoked": False,
+                                        "smoked_date": "",
+                                        "rating": 0.0,
+                                        "comments": ""
+                                    })
                                     st.rerun()
                         with col_c:
                             if st.button("🗑 Delete", key=f"del_{cid}"):
-                                data["cigars"] = [c for c in data["cigars"] if c["id"] != cid]
-                                save_data(data)
+                                delete_cigar(cid)
                                 st.session_state.expanded_id = None
                                 st.rerun()
 
-                # ── Smoke rating panel ──
                 if is_smoking and is_admin:
                     st.divider()
                     st.markdown("**How was it? Log your smoke:**")
@@ -287,12 +270,12 @@ with tab1:
                             cancel = st.form_submit_button("Cancel")
 
                         if save_smoke:
-                            idx = get_cigar_index(data, cid)
-                            data["cigars"][idx]["smoked"] = True
-                            data["cigars"][idx]["smoked_date"] = str(smoked_date)
-                            data["cigars"][idx]["rating"] = rating
-                            data["cigars"][idx]["comments"] = comments
-                            save_data(data)
+                            update_cigar(cid, {
+                                "smoked": True,
+                                "smoked_date": str(smoked_date),
+                                "rating": float(rating),
+                                "comments": comments
+                            })
                             st.session_state.smoking_id = None
                             st.rerun()
                         if cancel:
@@ -305,7 +288,8 @@ with tab1:
 with tab2:
     st.subheader("Tasting Journal")
 
-    smoked = [c for c in data["cigars"] if c["smoked"]]
+    all_cigars = load_cigars()
+    smoked = [c for c in all_cigars if c["smoked"]]
 
     if not smoked:
         st.info("No smoked cigars yet. Mark a cigar as smoked from the Humidor tab.")
@@ -323,7 +307,7 @@ with tab2:
         st.divider()
 
         st.markdown("**All entries:**")
-        for cigar in sorted(smoked, key=lambda c: c.get("smoked_date", ""), reverse=True):
+        for cigar in sorted(smoked, key=lambda c: c.get("smoked_date") or "", reverse=True):
             with st.container(border=True):
                 col1, col2 = st.columns([3, 1])
                 with col1:
@@ -335,7 +319,7 @@ with tab2:
                     if cigar.get("comments"):
                         st.info(f"💬 {cigar['comments']}")
                 with col2:
-                    st.caption(cigar.get("smoked_date", ""))
+                    st.caption(cigar.get("smoked_date") or "")
                     if cigar.get("rating"):
                         st.write(format_rating(cigar["rating"]))
                         st.caption(f"{cigar['rating']} / 5")
