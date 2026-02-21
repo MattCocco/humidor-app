@@ -204,10 +204,4 @@ with tab3:
 
     st.divider()
     st.caption("AI-powered personalized pairing recommendations coming soon.")
-```
 
----
-
-Once you've pasted it in and saved, go back to Terminal and run:
-```
-streamlit run app.py
