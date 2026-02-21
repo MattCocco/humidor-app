@@ -5,7 +5,7 @@ from datetime import date
 import anthropic
 
 # ── Page config ───────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Humidor", page_icon="🥃", layout="centered")
+st.set_page_config(page_title="Humidor", page_icon="🥃🌿", layout="centered")
 
 # ── Password / session state ──────────────────────────────────────────────────
 if "authenticated" not in st.session_state:
@@ -84,7 +84,7 @@ if "data" not in st.session_state:
 data = st.session_state.data
 
 # ── Header ────────────────────────────────────────────────────────────────────
-st.title("🥃 Humidor")
+st.title("🥃🌿 Humidor")
 st.caption("Your personal cigar journal")
 st.divider()
 
