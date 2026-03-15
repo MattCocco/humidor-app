@@ -13,7 +13,7 @@ def get_supabase():
 
 supabase = get_supabase()
 
-# ── Data helpers ──────────────────────────────────────────────────────────────
+# ── Data helpers — cigars ─────────────────────────────────────────────────────
 def load_cigars():
     res = supabase.table("cigars").select("*").order("id").execute()
     return res.data or []
@@ -27,6 +27,20 @@ def update_cigar(cid, updates):
 def delete_cigar(cid):
     supabase.table("cigars").delete().eq("id", cid).execute()
 
+# ── Data helpers — spirits ────────────────────────────────────────────────────
+def load_spirits():
+    res = supabase.table("spirits").select("*").order("id").execute()
+    return res.data or []
+
+def add_spirit(spirit):
+    supabase.table("spirits").insert(spirit).execute()
+
+def update_spirit(sid, updates):
+    supabase.table("spirits").update(updates).eq("id", sid).execute()
+
+def delete_spirit(sid):
+    supabase.table("spirits").delete().eq("id", sid).execute()
+
 # ── Password / session state ──────────────────────────────────────────────────
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -34,6 +48,10 @@ if "smoking_id" not in st.session_state:
     st.session_state.smoking_id = None
 if "expanded_id" not in st.session_state:
     st.session_state.expanded_id = None
+if "spirit_expanded_id" not in st.session_state:
+    st.session_state.spirit_expanded_id = None
+if "tasting_id" not in st.session_state:
+    st.session_state.tasting_id = None
 
 def check_password():
     with st.sidebar:
@@ -54,7 +72,7 @@ def check_password():
 check_password()
 is_admin = st.session_state.authenticated
 
-# ── Claude AI helper ──────────────────────────────────────────────────────────
+# ── Claude AI — cigar lookup ──────────────────────────────────────────────────
 def lookup_cigar(brand, name):
     import json
     client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
@@ -82,11 +100,61 @@ If you don't recognize the cigar, make your best guess based on the brand origin
             text = text[4:]
     return json.loads(text.strip())
 
+# ── Claude AI — spirit lookup ─────────────────────────────────────────────────
+def lookup_spirit(brand, name):
+    import json
+    client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+    prompt = f"""I have a spirit: Brand: {brand}, Name/Expression: {name}
+
+Please return ONLY a JSON object with these exact fields, no other text:
+{{
+  "category": "category from this list: Scotch Whisky, Bourbon, Irish Whiskey, Japanese Whisky, Amaro, Rum, Mezcal, Tequila, Cognac, Armagnac, Port, Sherry, Other",
+  "region": "region or origin (e.g. Islay, Speyside, Highland, Kentucky, Jalisco, etc.)",
+  "age": "age statement if known, e.g. 12 Year, 18 Year, NAS",
+  "abv": "ABV as a number e.g. 46.0",
+  "description": "2 sentence tasting note description covering key flavors and character"
+}}
+
+If you don't recognize the spirit, make your best guess based on the brand."""
+    message = client.messages.create(
+        model="claude-opus-4-6",
+        max_tokens=300,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    text = message.content[0].text.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+    return json.loads(text.strip())
+
+# ── Claude AI — cigar + spirit pairing ───────────────────────────────────────
+def get_pairing(cigar, spirit):
+    client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+    prompt = f"""I'm pairing a cigar with a spirit. Tell me how well they go together and why.
+
+Cigar: {cigar['brand']} {cigar['name']} ({cigar['vitola']}, {cigar['wrapper']} wrapper, {cigar['origin']}, {cigar['strength']} strength)
+Spirit: {spirit['brand']} {spirit['name']} ({spirit['category']}, {spirit.get('region','')}, {spirit.get('age','')})
+
+Please give:
+1. A pairing rating: Excellent / Good / Decent / Not Recommended
+2. A 2-3 sentence explanation of why they do or don't work together
+3. One tip for getting the most out of this pairing (e.g. when to sip, how to prepare)
+
+Be direct and opinionated."""
+    message = client.messages.create(
+        model="claude-opus-4-6",
+        max_tokens=300,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return message.content[0].text.strip()
+
 # ── Constants ─────────────────────────────────────────────────────────────────
-VITOLAS   = ["Robusto","Toro","Churchill","Corona","Lonsdale","Belicoso","Torpedo","Lancero","Petite Corona","Gordo"]
-WRAPPERS  = ["Colorado Claro","Colorado","Colorado Maduro","Maduro","Natural","Claro","Oscuro","Candela"]
-ORIGINS   = ["Nicaragua","Cuba","Dominican Republic","Honduras","Ecuador","Mexico","Cameroon","USA","Panama","Brazil"]
-STRENGTHS = ["Mild","Mild-Medium","Medium","Medium-Full","Full"]
+VITOLAS    = ["Robusto","Toro","Churchill","Corona","Lonsdale","Belicoso","Torpedo","Lancero","Petite Corona","Gordo"]
+WRAPPERS   = ["Colorado Claro","Colorado","Colorado Maduro","Maduro","Natural","Claro","Oscuro","Candela"]
+ORIGINS    = ["Nicaragua","Cuba","Dominican Republic","Honduras","Ecuador","Mexico","Cameroon","USA","Panama","Brazil"]
+STRENGTHS  = ["Mild","Mild-Medium","Medium","Medium-Full","Full"]
+CATEGORIES = ["Scotch Whisky","Bourbon","Irish Whiskey","Japanese Whisky","Amaro","Rum","Mezcal","Tequila","Cognac","Armagnac","Port","Sherry","Other"]
 HALF_STARS = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
 
 def format_rating(rating):
@@ -98,11 +166,11 @@ def format_rating(rating):
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.title("🥃 Humidor")
-st.caption("Your personal cigar journal")
+st.caption("Your personal cigar & spirits journal")
 st.divider()
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3 = st.tabs(["Humidor", "Tasting Journal", "Pairings"])
+tab1, tab2, tab3, tab4 = st.tabs(["Humidor", "Liquor Cabinet", "Tasting Journal", "Pairings"])
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 1 — HUMIDOR
@@ -144,7 +212,7 @@ with tab1:
                     with col2:
                         wrapper  = st.selectbox("Wrapper",  WRAPPERS,  index=WRAPPERS.index(r.get("wrapper", WRAPPERS[0])) if r.get("wrapper") in WRAPPERS else 0)
                         strength = st.selectbox("Strength", STRENGTHS, index=STRENGTHS.index(r.get("strength", STRENGTHS[0])) if r.get("strength") in STRENGTHS else 0)
-                        price    = st.number_input("Price per stick ($)", min_value=0.0, step=0.50)
+                        price    = st.number_input("Price per bottle ($)", min_value=0.0, step=0.50)
 
                     purchase_date = st.date_input("Purchase date", value=date.today())
                     notes = st.text_area("Tasting notes", value=r.get("description", ""), placeholder="Flavors, aroma, construction…")
@@ -169,9 +237,8 @@ with tab1:
 
     st.divider()
 
-    # Filter + search
-    filter_opt = st.radio("Show", ["All", "In Humidor", "Smoked", "Favorites"], horizontal=True)
-    search = st.text_input("Search", placeholder="Search by brand or name…")
+    filter_opt = st.radio("Show", ["All", "In Humidor", "Smoked", "Favorites"], horizontal=True, key="cigar_filter")
+    search = st.text_input("Search", placeholder="Search by brand or name…", key="cigar_search")
 
     cigars = load_cigars()
     if filter_opt == "In Humidor":
@@ -255,20 +322,14 @@ with tab1:
                     st.divider()
                     st.markdown("**How was it? Log your smoke:**")
                     with st.form(f"smoke_form_{cid}"):
-                        rating = st.select_slider(
-                            "Rating",
-                            options=HALF_STARS,
-                            value=3.0,
-                            format_func=lambda x: f"{x} ⭐"
-                        )
-                        comments = st.text_area("Personal comments", placeholder="e.g. Great smoke for the price, fantastic draw, pepper on the finish…")
+                        rating = st.select_slider("Rating", options=HALF_STARS, value=3.0, format_func=lambda x: f"{x} ⭐")
+                        comments = st.text_area("Personal comments", placeholder="e.g. Great smoke for the price, fantastic draw…")
                         smoked_date = st.date_input("Date smoked", value=date.today())
                         col_save, col_cancel = st.columns(2)
                         with col_save:
                             save_smoke = st.form_submit_button("Save", type="primary")
                         with col_cancel:
                             cancel = st.form_submit_button("Cancel")
-
                         if save_smoke:
                             update_cigar(cid, {
                                 "smoked": True,
@@ -283,68 +344,332 @@ with tab1:
                             st.rerun()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TAB 2 — TASTING JOURNAL
+# TAB 2 — LIQUOR CABINET
 # ─────────────────────────────────────────────────────────────────────────────
 with tab2:
-    st.subheader("Tasting Journal")
+    st.subheader("My Liquor Cabinet")
 
-    all_cigars = load_cigars()
-    smoked = [c for c in all_cigars if c["smoked"]]
-
-    if not smoked:
-        st.info("No smoked cigars yet. Mark a cigar as smoked from the Humidor tab.")
-    else:
-        rated = [c for c in smoked if c.get("rating")]
-        avg = sum(c["rating"] for c in rated) / len(rated) if rated else 0
-        favorites = [c for c in smoked if c.get("favorite")]
-
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Total Smoked", len(smoked))
-        col2.metric("Avg Rating", f"{avg:.1f} / 5" if avg else "—")
-        col3.metric("Unrated", len(smoked) - len(rated))
-        col4.metric("Favorites", len(favorites))
-
-        st.divider()
-
-        st.markdown("**All entries:**")
-        for cigar in sorted(smoked, key=lambda c: c.get("smoked_date") or "", reverse=True):
-            with st.container(border=True):
-                col1, col2 = st.columns([3, 1])
+    if is_admin:
+        with st.expander("➕ Add a new spirit"):
+            with st.form("spirit_lookup_form"):
+                col1, col2 = st.columns(2)
                 with col1:
-                    fav = "❤️ " if cigar.get("favorite") else ""
-                    st.markdown(f"{fav}**{cigar['brand']} {cigar['name']}**")
-                    st.caption(f"{cigar['vitola']} · {cigar['origin']} · {cigar['strength']}")
-                    if cigar.get("notes"):
-                        st.write(cigar["notes"])
-                    if cigar.get("comments"):
-                        st.info(f"💬 {cigar['comments']}")
+                    s_brand = st.text_input("Brand *", placeholder="e.g. Lagavulin")
                 with col2:
-                    st.caption(cigar.get("smoked_date") or "")
-                    if cigar.get("rating"):
-                        st.write(format_rating(cigar["rating"]))
-                        st.caption(f"{cigar['rating']} / 5")
+                    s_name = st.text_input("Name / Expression *", placeholder="e.g. 16 Year")
+                is_wishlist = st.checkbox("Add to wishlist only (haven't bought yet)")
+                s_lookup = st.form_submit_button("🔍 Look up spirit details")
+
+            if s_lookup and s_brand and s_name:
+                with st.spinner("Looking up spirit details..."):
+                    try:
+                        s_result = lookup_spirit(s_brand, s_name)
+                        st.session_state.spirit_lookup_result = s_result
+                        st.session_state.spirit_lookup_brand = s_brand
+                        st.session_state.spirit_lookup_name = s_name
+                        st.session_state.spirit_lookup_wishlist = is_wishlist
+                        st.success("Details found! Review and save below.")
+                    except Exception as e:
+                        st.error(f"Lookup failed: {e}. Please try again.")
+                        st.session_state.spirit_lookup_result = None
+
+            if "spirit_lookup_result" in st.session_state and st.session_state.spirit_lookup_result:
+                r = st.session_state.spirit_lookup_result
+                st.markdown("**Review details:**")
+                with st.form("add_spirit"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        s_category = st.selectbox("Category", CATEGORIES, index=CATEGORIES.index(r.get("category", CATEGORIES[0])) if r.get("category") in CATEGORIES else 0)
+                        s_age      = st.text_input("Age", value=r.get("age", ""))
+                        s_price    = st.number_input("Price ($)", min_value=0.0, step=1.0)
+                    with col2:
+                        s_region   = st.text_input("Region", value=r.get("region", ""))
+                        s_abv      = st.number_input("ABV (%)", min_value=0.0, max_value=100.0, value=float(r.get("abv", 40.0)), step=0.5)
+                        s_purchase_date = st.date_input("Purchase date", value=date.today())
+
+                    s_notes = st.text_area("Tasting notes", value=r.get("description", ""), placeholder="Flavors, aroma, finish…")
+
+                    s_submitted = st.form_submit_button("Save Spirit", type="primary")
+                    if s_submitted:
+                        new_spirit = {
+                            "brand": st.session_state.spirit_lookup_brand,
+                            "name": st.session_state.spirit_lookup_name,
+                            "category": s_category,
+                            "region": s_region,
+                            "age": s_age,
+                            "abv": float(s_abv),
+                            "price": float(s_price),
+                            "notes": s_notes,
+                            "comments": "",
+                            "purchase_date": str(s_purchase_date),
+                            "tried": False,
+                            "tried_date": "",
+                            "rating": 0.0,
+                            "favorite": False,
+                            "wishlist": st.session_state.spirit_lookup_wishlist
+                        }
+                        add_spirit(new_spirit)
+                        del st.session_state.spirit_lookup_result
+                        st.success(f"Added {st.session_state.spirit_lookup_brand} {st.session_state.spirit_lookup_name}!")
+                        st.rerun()
+
+    st.divider()
+
+    s_filter = st.radio("Show", ["All", "In Cabinet", "Wishlist", "Tried", "Favorites"], horizontal=True, key="spirit_filter")
+    s_search = st.text_input("Search", placeholder="Search by brand or name…", key="spirit_search")
+
+    spirits = load_spirits()
+    if s_filter == "In Cabinet":
+        spirits = [s for s in spirits if not s.get("wishlist") and not s.get("tried")]
+    elif s_filter == "Wishlist":
+        spirits = [s for s in spirits if s.get("wishlist")]
+    elif s_filter == "Tried":
+        spirits = [s for s in spirits if s.get("tried")]
+    elif s_filter == "Favorites":
+        spirits = [s for s in spirits if s.get("favorite")]
+    if s_search:
+        spirits = [s for s in spirits if s_search.lower() in f"{s['brand']} {s['name']}".lower()]
+
+    if not spirits:
+        st.info("No spirits found. Add one above!" if is_admin else "The cabinet is empty.")
+    else:
+        for spirit in spirits:
+            sid = spirit["id"]
+            is_expanded = st.session_state.spirit_expanded_id == sid
+            is_tasting  = st.session_state.tasting_id == sid
+
+            with st.container(border=True):
+                col1, col2, col3 = st.columns([0.08, 3.5, 1])
+
+                with col1:
+                    heart = "❤️" if spirit.get("favorite") else "🤍"
+                    if is_admin:
+                        if st.button(heart, key=f"sfav_{sid}", help="Toggle favorite"):
+                            update_spirit(sid, {"favorite": not spirit.get("favorite", False)})
+                            st.rerun()
+                    else:
+                        st.write(heart)
+
+                with col2:
+                    wishlist_badge = " 🔖" if spirit.get("wishlist") else ""
+                    st.markdown(f"**{spirit['brand']} {spirit['name']}**{wishlist_badge}")
+                    detail = spirit.get("category", "")
+                    if spirit.get("region"):
+                        detail += f" · {spirit['region']}"
+                    if spirit.get("age"):
+                        detail += f" · {spirit['age']}"
+                    if spirit.get("abv"):
+                        detail += f" · {spirit['abv']}%"
+                    st.caption(detail)
+                    if spirit.get("tried") and spirit.get("rating"):
+                        st.caption(f"{format_rating(spirit['rating'])} · Tried {spirit.get('tried_date','')}")
+
+                with col3:
+                    expand_label = "▲ Less" if is_expanded else "▼ Details"
+                    if st.button(expand_label, key=f"sexp_{sid}"):
+                        st.session_state.spirit_expanded_id = None if is_expanded else sid
+                        st.session_state.tasting_id = None
+                        st.rerun()
+
+                if is_expanded:
+                    st.divider()
+                    if spirit.get("notes"):
+                        st.markdown(f"📝 **Tasting notes:** {spirit['notes']}")
+                    if spirit.get("comments"):
+                        st.markdown(f"💬 **My comments:** {spirit['comments']}")
+                    if spirit.get("price"):
+                        st.caption(f"Price: ${spirit['price']:.2f}")
+                    if spirit.get("purchase_date"):
+                        st.caption(f"Purchased: {spirit['purchase_date']}")
+                    if spirit.get("wishlist"):
+                        st.caption("🔖 On your wishlist")
+
+                    if is_admin:
+                        col_a, col_b, col_c = st.columns(3)
+                        with col_a:
+                            if spirit.get("wishlist"):
+                                if st.button("✅ Move to Cabinet", key=f"scabinet_{sid}"):
+                                    update_spirit(sid, {"wishlist": False})
+                                    st.rerun()
+                            if not spirit.get("tried"):
+                                if st.button("🥃 Mark Tried", key=f"stried_{sid}"):
+                                    st.session_state.tasting_id = sid
+                                    st.rerun()
+                            else:
+                                if st.button("↩️ Unmark Tried", key=f"suntried_{sid}"):
+                                    update_spirit(sid, {
+                                        "tried": False,
+                                        "tried_date": "",
+                                        "rating": 0.0,
+                                        "comments": ""
+                                    })
+                                    st.rerun()
+                        with col_c:
+                            if st.button("🗑 Delete", key=f"sdel_{sid}"):
+                                delete_spirit(sid)
+                                st.session_state.spirit_expanded_id = None
+                                st.rerun()
+
+                if is_tasting and is_admin:
+                    st.divider()
+                    st.markdown("**How was it? Log your tasting:**")
+                    with st.form(f"tasting_form_{sid}"):
+                        s_rating = st.select_slider("Rating", options=HALF_STARS, value=3.0, format_func=lambda x: f"{x} ⭐")
+                        s_comments = st.text_area("Personal comments", placeholder="e.g. Incredibly smooth, notes of vanilla and oak…")
+                        tried_date = st.date_input("Date tried", value=date.today())
+                        col_save, col_cancel = st.columns(2)
+                        with col_save:
+                            save_tasting = st.form_submit_button("Save", type="primary")
+                        with col_cancel:
+                            s_cancel = st.form_submit_button("Cancel")
+                        if save_tasting:
+                            update_spirit(sid, {
+                                "tried": True,
+                                "tried_date": str(tried_date),
+                                "rating": float(s_rating),
+                                "comments": s_comments,
+                                "wishlist": False
+                            })
+                            st.session_state.tasting_id = None
+                            st.rerun()
+                        if s_cancel:
+                            st.session_state.tasting_id = None
+                            st.rerun()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TAB 3 — PAIRINGS
+# TAB 3 — TASTING JOURNAL
 # ─────────────────────────────────────────────────────────────────────────────
 with tab3:
-    st.subheader("Pairing Guide")
-    st.caption("Classic cigar & spirit pairings to inspire your next smoke.")
+    st.subheader("Tasting Journal")
 
-    pairings = [
-        ("Full-bodied Nicaraguan", "Aged Rum or Single Malt Scotch", "The earthiness and pepper of a Nicaraguan pairs beautifully with the caramel and oak of aged rum, or the smoky depth of an Islay Scotch."),
-        ("Mild Connecticut Shade", "Champagne or Light Bourbon", "A creamy, mild cigar won't overpower a delicate sparkling wine. A wheated bourbon like Maker's Mark is another great match."),
-        ("Maduro Wrapper", "Bourbon or Amaro", "The natural sweetness of a maduro wrapper echoes the vanilla and caramel in bourbon. An herbal amaro like Averna also complements the dark, earthy notes."),
-        ("Cuban-style Corona", "Single Malt Scotch (Highland)", "A classic pairing — the grassy, floral notes of a Cuban-style cigar balance well against the fruit and honey of a Highland Scotch like Dalmore or Glenmorangie."),
-        ("Cameroon Wrapper", "Cognac or Armagnac", "The cedar, spice, and sweetness of a Cameroon wrapper is a natural companion to aged French brandy — a true old-world combination."),
-        ("Habano Wrapper", "Añejo Tequila or Mezcal", "The spice and complexity of a Habano wrapper finds a match in the agave-forward depth of an añejo or the smoky character of a mezcal."),
-    ]
+    j_tab1, j_tab2 = st.tabs(["Cigars", "Spirits"])
 
-    for cigar_type, spirit, description in pairings:
-        with st.container(border=True):
-            col1, col2 = st.columns([1, 1])
+    with j_tab1:
+        all_cigars = load_cigars()
+        smoked = [c for c in all_cigars if c["smoked"]]
+
+        if not smoked:
+            st.info("No smoked cigars yet.")
+        else:
+            rated = [c for c in smoked if c.get("rating")]
+            avg = sum(c["rating"] for c in rated) / len(rated) if rated else 0
+            favorites = [c for c in smoked if c.get("favorite")]
+
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Total Smoked", len(smoked))
+            col2.metric("Avg Rating", f"{avg:.1f} / 5" if avg else "—")
+            col3.metric("Unrated", len(smoked) - len(rated))
+            col4.metric("Favorites", len(favorites))
+            st.divider()
+
+            for cigar in sorted(smoked, key=lambda c: c.get("smoked_date") or "", reverse=True):
+                with st.container(border=True):
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        fav = "❤️ " if cigar.get("favorite") else ""
+                        st.markdown(f"{fav}**{cigar['brand']} {cigar['name']}**")
+                        st.caption(f"{cigar['vitola']} · {cigar['origin']} · {cigar['strength']}")
+                        if cigar.get("notes"):
+                            st.write(cigar["notes"])
+                        if cigar.get("comments"):
+                            st.info(f"💬 {cigar['comments']}")
+                    with col2:
+                        st.caption(cigar.get("smoked_date") or "")
+                        if cigar.get("rating"):
+                            st.write(format_rating(cigar["rating"]))
+                            st.caption(f"{cigar['rating']} / 5")
+
+    with j_tab2:
+        all_spirits = load_spirits()
+        tried = [s for s in all_spirits if s.get("tried")]
+
+        if not tried:
+            st.info("No spirits tasted yet.")
+        else:
+            s_rated = [s for s in tried if s.get("rating")]
+            s_avg = sum(s["rating"] for s in s_rated) / len(s_rated) if s_rated else 0
+            s_favorites = [s for s in tried if s.get("favorite")]
+
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Total Tried", len(tried))
+            col2.metric("Avg Rating", f"{s_avg:.1f} / 5" if s_avg else "—")
+            col3.metric("Unrated", len(tried) - len(s_rated))
+            col4.metric("Favorites", len(s_favorites))
+            st.divider()
+
+            for spirit in sorted(tried, key=lambda s: s.get("tried_date") or "", reverse=True):
+                with st.container(border=True):
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        fav = "❤️ " if spirit.get("favorite") else ""
+                        st.markdown(f"{fav}**{spirit['brand']} {spirit['name']}**")
+                        st.caption(f"{spirit['category']} · {spirit.get('region','')} · {spirit.get('age','')}")
+                        if spirit.get("notes"):
+                            st.write(spirit["notes"])
+                        if spirit.get("comments"):
+                            st.info(f"💬 {spirit['comments']}")
+                    with col2:
+                        st.caption(spirit.get("tried_date") or "")
+                        if spirit.get("rating"):
+                            st.write(format_rating(spirit["rating"]))
+                            st.caption(f"{spirit['rating']} / 5")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 4 — PAIRINGS
+# ─────────────────────────────────────────────────────────────────────────────
+with tab4:
+    st.subheader("Pairings")
+
+    p_tab1, p_tab2 = st.tabs(["My Pairings", "Classic Guide"])
+
+    with p_tab1:
+        st.markdown("Pick a cigar and a spirit from your collection and Claude will rate the pairing.")
+
+        all_cigars = load_cigars()
+        all_spirits = load_spirits()
+
+        if not all_cigars or not all_spirits:
+            st.info("Add cigars and spirits to your collection first to use the pairing tool.")
+        else:
+            col1, col2 = st.columns(2)
             with col1:
-                st.markdown(f"🚬 **{cigar_type}**")
+                cigar_options = {f"{c['brand']} {c['name']} ({c['vitola']})": c for c in all_cigars}
+                selected_cigar_key = st.selectbox("Choose a cigar", list(cigar_options.keys()))
+                selected_cigar = cigar_options[selected_cigar_key]
             with col2:
-                st.markdown(f"🥃 **{spirit}**")
-            st.write(description)
+                spirit_options = {f"{s['brand']} {s['name']} ({s['category']})": s for s in all_spirits}
+                selected_spirit_key = st.selectbox("Choose a spirit", list(spirit_options.keys()))
+                selected_spirit = spirit_options[selected_spirit_key]
+
+            if st.button("🔍 Get Pairing Recommendation", type="primary"):
+                with st.spinner("Analyzing pairing..."):
+                    try:
+                        result = get_pairing(selected_cigar, selected_spirit)
+                        st.session_state.pairing_result = result
+                    except Exception as e:
+                        st.error(f"Failed: {e}")
+
+            if "pairing_result" in st.session_state:
+                st.divider()
+                st.markdown(st.session_state.pairing_result)
+
+    with p_tab2:
+        st.caption("Classic cigar & spirit pairings to inspire your next smoke.")
+
+        pairings = [
+            ("Full-bodied Nicaraguan", "Aged Rum or Single Malt Scotch", "The earthiness and pepper of a Nicaraguan pairs beautifully with the caramel and oak of aged rum, or the smoky depth of an Islay Scotch."),
+            ("Mild Connecticut Shade", "Champagne or Light Bourbon", "A creamy, mild cigar won't overpower a delicate sparkling wine. A wheated bourbon like Maker's Mark is another great match."),
+            ("Maduro Wrapper", "Bourbon or Amaro", "The natural sweetness of a maduro wrapper echoes the vanilla and caramel in bourbon. An herbal amaro like Averna also complements the dark, earthy notes."),
+            ("Cuban-style Corona", "Single Malt Scotch (Highland)", "A classic pairing — the grassy, floral notes of a Cuban-style cigar balance well against the fruit and honey of a Highland Scotch like Dalmore or Glenmorangie."),
+            ("Cameroon Wrapper", "Cognac or Armagnac", "The cedar, spice, and sweetness of a Cameroon wrapper is a natural companion to aged French brandy — a true old-world combination."),
+            ("Habano Wrapper", "Añejo Tequila or Mezcal", "The spice and complexity of a Habano wrapper finds a match in the agave-forward depth of an añejo or the smoky character of a mezcal."),
+        ]
+
+        for cigar_type, spirit, description in pairings:
+            with st.container(border=True):
+                col1, col2 = st.columns([1, 1])
+                with col1:
+                    st.markdown(f"🚬 **{cigar_type}**")
+                with col2:
+                    st.markdown(f"🥃 **{spirit}**")
+                st.write(description)
