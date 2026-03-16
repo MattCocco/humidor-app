@@ -25,7 +25,7 @@ html, body, [class*="css"] {
 /* App title */
 .cabinet-title {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 108px;
+    font-size: 72px;
     letter-spacing: 0.05em;
     line-height: 1;
     color: #F0EDE6;
@@ -86,16 +86,6 @@ html, body, [class*="css"] {
     color: #999;
     transition: all 0.15s;
 }
-
-/* Heart buttons — no border, no background */
-.stButton > button[title="Toggle favorite"] {
-    border: none !important;
-    background: transparent !important;
-    padding: 4px !important;
-    font-size: 16px !important;
-    color: transparent !important;
-    box-shadow: none !important;
-}
 .stButton > button:hover {
     border-color: #C9A84C;
     color: #C9A84C;
@@ -136,7 +126,7 @@ html, body, [class*="css"] {
     font-size: 10px;
     letter-spacing: 0.15em;
     text-transform: uppercase;
-    color: #AAA;
+    color: #666;
 }
 
 /* Radio */
@@ -201,9 +191,9 @@ h1, h2, h3 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; colo
     font-size: 9px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    background: #3A3A3A;
-    color: #E0E0E0;
-    border: 1px solid #555;
+    background: #1A1A1A;
+    color: #666;
+    border: 1px solid #2A2A2A;
     padding: 2px 7px;
     border-radius: 2px;
     margin-left: 6px;
