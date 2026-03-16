@@ -86,16 +86,6 @@ html, body, [class*="css"] {
     color: #999;
     transition: all 0.15s;
 }
-
-/* Heart buttons — no border, no background */
-button[title="Toggle favorite"] {
-    border: none !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    min-height: unset !important;
-    padding: 2px 4px !important;
-}
-}
 .stButton > button:hover {
     border-color: #C9A84C;
     color: #C9A84C;
