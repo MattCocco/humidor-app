@@ -87,6 +87,15 @@ html, body, [class*="css"] {
     transition: all 0.15s;
 }
 
+/* Heart buttons — no border, no background */
+.stButton > button[title="Toggle favorite"] {
+    border: none !important;
+    background: transparent !important;
+    padding: 4px !important;
+    font-size: 16px !important;
+    color: transparent !important;
+    box-shadow: none !important;
+}
 .stButton > button:hover {
     border-color: #C9A84C;
     color: #C9A84C;
@@ -110,19 +119,10 @@ html, body, [class*="css"] {
 .stSelectbox > div > div,
 .stNumberInput > div > div > input {
     background: #1A1A1A !important;
-    border: 1px solid #444 !important;
+    border: 1px solid #2A2A2A !important;
     border-radius: 3px !important;
     color: #F0EDE6 !important;
     font-family: 'Instrument Sans', sans-serif !important;
-}
-.stTextInput > div > div > input::placeholder,
-.stTextArea > div > div > textarea::placeholder {
-    color: #666 !important;
-}
-.stTextInput > div > div > input:focus,
-.stTextArea > div > div > textarea:focus {
-    border-color: #C9A84C !important;
-    outline: none !important;
 }
 
 /* Metrics */
