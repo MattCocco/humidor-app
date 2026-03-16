@@ -4,7 +4,7 @@ import anthropic
 from supabase import create_client
 
 # ── Page config ───────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Humidor", page_icon="🥃", layout="centered")
+st.set_page_config(page_title="The Cabinet", page_icon="🥃", layout="centered")
 
 # ── Supabase client ───────────────────────────────────────────────────────────
 @st.cache_resource
@@ -165,7 +165,7 @@ def format_rating(rating):
     return "⭐" * full + ("½" if half else "")
 
 # ── Header ────────────────────────────────────────────────────────────────────
-st.title("🥃 Humidor")
+st.title("🥃 The Cabinet")
 st.caption("Your personal cigar & spirits journal")
 st.divider()
 
