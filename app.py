@@ -170,7 +170,7 @@ st.caption("Your personal cigar & spirits journal")
 st.divider()
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4 = st.tabs(["Humidor", "Liquor Cabinet", "Tasting Journal", "Pairings"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Humidor", "Liquor Cabinet", "Tasting Journal", "Pairings", "For You"])
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 1 — HUMIDOR
@@ -673,3 +673,89 @@ with tab4:
                 with col2:
                     st.markdown(f"🥃 **{spirit}**")
                 st.write(description)
+                
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 5 — FOR YOU (RECOMMENDATIONS)
+# ─────────────────────────────────────────────────────────────────────────────
+with tab5:
+    st.subheader("Picked For You")
+    st.caption("Based on your highest rated and favorited cigars and spirits.")
+    st.divider()
+
+    all_cigars = load_cigars()
+    all_spirits = load_spirits()
+
+    top_cigars  = sorted([c for c in all_cigars if c.get("rating")], key=lambda x: x["rating"], reverse=True)[:3]
+    fav_cigars  = [c for c in all_cigars if c.get("favorite")][:3]
+    top_spirits = sorted([s for s in all_spirits if s.get("rating")], key=lambda x: x["rating"], reverse=True)[:3]
+    fav_spirits = [s for s in all_spirits if s.get("favorite")][:3]
+
+    has_data = top_cigars or fav_cigars or top_spirits or fav_spirits
+
+    if not has_data:
+        st.info("Rate some cigars and spirits, or mark some as favorites, and Claude will recommend what to try next.")
+    else:
+        if top_cigars:
+            st.markdown("**Your Top Cigars**")
+            cols = st.columns(len(top_cigars))
+            for i, c in enumerate(top_cigars):
+                with cols[i]:
+                    with st.container(border=True):
+                        st.markdown(f"**{c['brand']}**")
+                        st.caption(c['name'])
+                        st.write(format_rating(c['rating']))
+
+        if top_spirits:
+            st.markdown("**Your Top Spirits**")
+            cols = st.columns(len(top_spirits))
+            for i, s in enumerate(top_spirits):
+                with cols[i]:
+                    with st.container(border=True):
+                        st.markdown(f"**{s['brand']}**")
+                        st.caption(s['name'])
+                        st.write(format_rating(s['rating']))
+
+        st.divider()
+
+        if st.button("✨ Generate My Recommendations", type="primary"):
+            with st.spinner("Claude is analyzing your taste profile..."):
+                try:
+                    client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+                    cigar_context = ""
+                    if top_cigars:
+                        cigar_context += "Highest rated cigars: " + ", ".join([f"{c['brand']} {c['name']} ({c['rating']}/5)" for c in top_cigars])
+                    if fav_cigars:
+                        cigar_context += "\nFavorite cigars: " + ", ".join([f"{c['brand']} {c['name']}" for c in fav_cigars])
+                    spirit_context = ""
+                    if top_spirits:
+                        spirit_context += "Highest rated spirits: " + ", ".join([f"{s['brand']} {s['name']} ({s['rating']}/5)" for s in top_spirits])
+                    if fav_spirits:
+                        spirit_context += "\nFavorite spirits: " + ", ".join([f"{s['brand']} {s['name']}" for s in fav_spirits])
+
+                    prompt = f"""Based on this person's taste profile, give them personalized recommendations.
+
+CIGARS:
+{cigar_context or "No data yet"}
+
+SPIRITS:
+{spirit_context or "No data yet"}
+
+Please provide:
+1. **3 Cigars to Try Next** — specific brand and line, with a one sentence reason why based on their taste profile
+2. **3 Spirits to Try Next** — specific brand and expression, with a one sentence reason why
+3. **One Bold Suggestion** — something slightly outside their comfort zone that you think they'd love, with a compelling reason
+
+Be specific, opinionated, and knowledgeable. Write like a trusted expert who knows their palate well."""
+
+                    message = client.messages.create(
+                        model="claude-opus-4-6",
+                        max_tokens=600,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    st.session_state.recommendations = message.content[0].text.strip()
+                except Exception as e:
+                    st.error(f"Failed: {e}")
+
+        if "recommendations" in st.session_state:
+            st.divider()
+            st.markdown(st.session_state.recommendations)
