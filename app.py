@@ -88,13 +88,13 @@ html, body, [class*="css"] {
 }
 
 /* Heart buttons — no border, no background */
-.stButton > button[title="Toggle favorite"] {
+button[title="Toggle favorite"] {
     border: none !important;
     background: transparent !important;
-    padding: 4px !important;
-    font-size: 16px !important;
-    color: transparent !important;
     box-shadow: none !important;
+    min-height: unset !important;
+    padding: 2px 4px !important;
+}
 }
 .stButton > button:hover {
     border-color: #C9A84C;
