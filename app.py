@@ -622,7 +622,7 @@ with tab4:
 
     p_tab1, p_tab2 = st.tabs(["My Pairings", "Classic Guide"])
 
-   with p_tab1:
+    with p_tab1:
         st.markdown("Choose a cigar from your humidor and type in any spirit — great for cigar bars or bottle shops.")
 
         all_cigars = load_cigars()
