@@ -622,14 +622,13 @@ with tab4:
 
     p_tab1, p_tab2 = st.tabs(["My Pairings", "Classic Guide"])
 
-    with p_tab1:
-        st.markdown("Pick a cigar and a spirit from your collection and Claude will rate the pairing.")
+   with p_tab1:
+        st.markdown("Choose a cigar from your humidor and type in any spirit — great for cigar bars or bottle shops.")
 
         all_cigars = load_cigars()
-        all_spirits = load_spirits()
 
-        if not all_cigars or not all_spirits:
-            st.info("Add cigars and spirits to your collection first to use the pairing tool.")
+        if not all_cigars:
+            st.info("Add cigars to your humidor first.")
         else:
             col1, col2 = st.columns(2)
             with col1:
@@ -637,21 +636,77 @@ with tab4:
                 selected_cigar_key = st.selectbox("Choose a cigar", list(cigar_options.keys()))
                 selected_cigar = cigar_options[selected_cigar_key]
             with col2:
-                spirit_options = {f"{s['brand']} {s['name']} ({s['category']})": s for s in all_spirits}
-                selected_spirit_key = st.selectbox("Choose a spirit", list(spirit_options.keys()))
-                selected_spirit = spirit_options[selected_spirit_key]
+                spirit_query = st.text_input("Type any spirit", placeholder="e.g. Lagavulin 16, Averna Amaro, Blanton's…")
 
             if st.button("🔍 Get Pairing Recommendation", type="primary"):
-                with st.spinner("Analyzing pairing..."):
-                    try:
-                        result = get_pairing(selected_cigar, selected_spirit)
-                        st.session_state.pairing_result = result
-                    except Exception as e:
-                        st.error(f"Failed: {e}")
+                if not spirit_query:
+                    st.warning("Please enter a spirit name.")
+                else:
+                    with st.spinner("Analyzing pairing..."):
+                        try:
+                            client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+                            prompt = f"""I'm pairing a cigar with a spirit. Tell me how well they go together.
+
+Cigar: {selected_cigar['brand']} {selected_cigar['name']} ({selected_cigar['vitola']}, {selected_cigar['wrapper']} wrapper, {selected_cigar['origin']}, {selected_cigar['strength']} strength)
+Spirit: {spirit_query}
+
+Please give:
+1. A pairing rating: Excellent / Good / Decent / Not Recommended
+2. A 2-3 sentence explanation of why they do or don't work together
+3. One tip for getting the most out of this pairing
+
+Be direct and opinionated."""
+                            message = client.messages.create(
+                                model="claude-opus-4-6",
+                                max_tokens=300,
+                                messages=[{"role": "user", "content": prompt}]
+                            )
+                            st.session_state.pairing_result = message.content[0].text.strip()
+                            st.session_state.pairing_spirit_query = spirit_query
+                            st.session_state.pairing_cigar = selected_cigar
+                        except Exception as e:
+                            st.error(f"Failed: {e}")
 
             if "pairing_result" in st.session_state:
                 st.divider()
                 st.markdown(st.session_state.pairing_result)
+
+                if is_admin:
+                    st.divider()
+                    st.markdown("**Want to add this spirit to your cabinet?**")
+                    with st.form("add_pairing_spirit"):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            add_cat   = st.selectbox("Category", CATEGORIES)
+                            add_region = st.text_input("Region", placeholder="e.g. Islay, Kentucky…")
+                            add_price  = st.number_input("Price ($)", min_value=0.0, step=1.0)
+                        with col2:
+                            add_age   = st.text_input("Age", placeholder="e.g. 16 Year, NAS")
+                            add_abv   = st.number_input("ABV (%)", min_value=0.0, max_value=100.0, value=40.0, step=0.5)
+                            add_wish  = st.checkbox("Add to wishlist only")
+                        add_notes = st.text_area("Notes", placeholder="Tasting notes…")
+                        if st.form_submit_button("Add to Cabinet", type="primary"):
+                            parts = st.session_state.pairing_spirit_query.strip().rsplit(" ", 1)
+                            s_brand = parts[0] if len(parts) > 1 else st.session_state.pairing_spirit_query
+                            s_name  = parts[1] if len(parts) > 1 else ""
+                            add_spirit({
+                                "brand": s_brand,
+                                "name": s_name,
+                                "category": add_cat,
+                                "region": add_region,
+                                "age": add_age,
+                                "abv": float(add_abv),
+                                "price": float(add_price),
+                                "notes": add_notes,
+                                "comments": "",
+                                "purchase_date": str(date.today()),
+                                "tried": False,
+                                "tried_date": "",
+                                "rating": 0.0,
+                                "favorite": False,
+                                "wishlist": add_wish
+                            })
+                            st.success(f"Added {st.session_state.pairing_spirit_query} to your cabinet!")
 
     with p_tab2:
         st.caption("Classic cigar & spirit pairings to inspire your next smoke.")
