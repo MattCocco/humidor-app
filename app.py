@@ -270,31 +270,31 @@ If the query is vague, return your best guess and set confidence to Low or Mediu
     filter_opt = st.radio("Show", ["In Humidor", "Smoked", "Favorites", "All"], horizontal=True, key="cigar_filter")
     search = st.text_input("Search", placeholder="e.g. Padron anniversario, nicaraguan robusto…", key="cigar_search")
 
-cigars = load_cigars()
-if filter_opt == "In Humidor":
-    cigars = [c for c in cigars if not c["smoked"]]
-elif filter_opt == "Smoked":
-    cigars = [c for c in cigars if c["smoked"]]
-elif filter_opt == "Favorites":
-    cigars = [c for c in cigars if c.get("favorite")]
+    cigars = load_cigars()
+    if filter_opt == "In Humidor":
+        cigars = [c for c in cigars if not c["smoked"]]
+    elif filter_opt == "Smoked":
+        cigars = [c for c in cigars if c["smoked"]]
+    elif filter_opt == "Favorites":
+        cigars = [c for c in cigars if c.get("favorite")]
 
-if search:
-    search_terms = search.lower().split()
-    def match_score(cigar):
-        haystack = f"{cigar['brand']} {cigar['name']} {cigar['vitola']} {cigar['origin']} {cigar['wrapper']} {cigar['strength']}".lower()
-        return sum(1 for term in search_terms if term in haystack)
-    scored = [(c, match_score(c)) for c in cigars]
-    scored = [(c, s) for c, s in scored if s > 0]
-    scored.sort(key=lambda x: x[1], reverse=True)
-    if scored:
-        best_score = scored[0][1]
-        best_matches = [c for c, s in scored if s == best_score]
-        if len(best_matches) == 1 and best_score < len(search_terms):
-            st.info(f"Best match found for \"{search}\" — not quite right? Try different keywords.")
-        cigars = [c for c, s in scored]
-    else:
-        st.warning(f"No matches found for \"{search}\". Try fewer or different keywords.")
-        cigars = []
+    if search:
+        search_terms = search.lower().split()
+        def match_score(cigar):
+            haystack = f"{cigar['brand']} {cigar['name']} {cigar['vitola']} {cigar['origin']} {cigar['wrapper']} {cigar['strength']}".lower()
+            return sum(1 for term in search_terms if term in haystack)
+        scored = [(c, match_score(c)) for c in cigars]
+        scored = [(c, s) for c, s in scored if s > 0]
+        scored.sort(key=lambda x: x[1], reverse=True)
+        if scored:
+            best_score = scored[0][1]
+            best_matches = [c for c, s in scored if s == best_score]
+            if len(best_matches) == 1 and best_score < len(search_terms):
+                st.info(f"Best match found for \"{search}\" — not quite right? Try different keywords.")
+            cigars = [c for c, s in scored]
+        else:
+            st.warning(f"No matches found for \"{search}\". Try fewer or different keywords.")
+            cigars = []
 
     if not cigars:
         st.info("No cigars found. Add one above!" if is_admin else "The humidor is empty.")
@@ -387,199 +387,6 @@ if search:
                             st.rerun()
                         if cancel:
                             st.session_state.smoking_id = None
-                            st.rerun()
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TAB 2 — LIQUOR CABINET
-# ─────────────────────────────────────────────────────────────────────────────
-with tab2:
-    st.subheader("My Liquor Cabinet")
-
-    if is_admin:
-        with st.expander("➕ Add a new spirit"):
-            with st.form("spirit_lookup_form"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    s_brand = st.text_input("Brand *", placeholder="e.g. Lagavulin")
-                with col2:
-                    s_name = st.text_input("Name / Expression *", placeholder="e.g. 16 Year")
-                is_wishlist = st.checkbox("Add to wishlist only (haven't bought yet)")
-                s_lookup = st.form_submit_button("🔍 Look up spirit details")
-
-            if s_lookup and s_brand and s_name:
-                with st.spinner("Looking up spirit details..."):
-                    try:
-                        s_result = lookup_spirit(s_brand, s_name)
-                        st.session_state.spirit_lookup_result = s_result
-                        st.session_state.spirit_lookup_brand = s_brand
-                        st.session_state.spirit_lookup_name = s_name
-                        st.session_state.spirit_lookup_wishlist = is_wishlist
-                        st.success("Details found! Review and save below.")
-                    except Exception as e:
-                        st.error(f"Lookup failed: {e}. Please try again.")
-                        st.session_state.spirit_lookup_result = None
-
-            if "spirit_lookup_result" in st.session_state and st.session_state.spirit_lookup_result:
-                r = st.session_state.spirit_lookup_result
-                st.markdown("**Review details:**")
-                with st.form("add_spirit"):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        s_category = st.selectbox("Category", CATEGORIES, index=CATEGORIES.index(r.get("category", CATEGORIES[0])) if r.get("category") in CATEGORIES else 0)
-                        s_age      = st.text_input("Age", value=r.get("age", ""))
-                        s_price    = st.number_input("Price ($)", min_value=0.0, step=1.0)
-                    with col2:
-                        s_region   = st.text_input("Region", value=r.get("region", ""))
-                        s_abv      = st.number_input("ABV (%)", min_value=0.0, max_value=100.0, value=float(r.get("abv", 40.0)), step=0.5)
-                        s_purchase_date = st.date_input("Purchase date", value=date.today())
-
-                    s_notes = st.text_area("Tasting notes", value=r.get("description", ""), placeholder="Flavors, aroma, finish…")
-
-                    s_submitted = st.form_submit_button("Save Spirit", type="primary")
-                    if s_submitted:
-                        new_spirit = {
-                            "brand": st.session_state.spirit_lookup_brand,
-                            "name": st.session_state.spirit_lookup_name,
-                            "category": s_category,
-                            "region": s_region,
-                            "age": s_age,
-                            "abv": float(s_abv),
-                            "price": float(s_price),
-                            "notes": s_notes,
-                            "comments": "",
-                            "purchase_date": str(s_purchase_date),
-                            "tried": False,
-                            "tried_date": "",
-                            "rating": 0.0,
-                            "favorite": False,
-                            "wishlist": st.session_state.spirit_lookup_wishlist
-                        }
-                        add_spirit(new_spirit)
-                        del st.session_state.spirit_lookup_result
-                        st.success(f"Added {st.session_state.spirit_lookup_brand} {st.session_state.spirit_lookup_name}!")
-                        st.rerun()
-
-    st.divider()
-
-    s_filter = st.radio("Show", ["All", "In Cabinet", "Wishlist", "Tried", "Favorites"], horizontal=True, key="spirit_filter")
-    s_search = st.text_input("Search", placeholder="Search by brand or name…", key="spirit_search")
-
-    spirits = load_spirits()
-    if s_filter == "In Cabinet":
-        spirits = [s for s in spirits if not s.get("wishlist") and not s.get("tried")]
-    elif s_filter == "Wishlist":
-        spirits = [s for s in spirits if s.get("wishlist")]
-    elif s_filter == "Tried":
-        spirits = [s for s in spirits if s.get("tried")]
-    elif s_filter == "Favorites":
-        spirits = [s for s in spirits if s.get("favorite")]
-    if s_search:
-        spirits = [s for s in spirits if s_search.lower() in f"{s['brand']} {s['name']}".lower()]
-
-    if not spirits:
-        st.info("No spirits found. Add one above!" if is_admin else "The cabinet is empty.")
-    else:
-        for spirit in spirits:
-            sid = spirit["id"]
-            is_expanded = st.session_state.spirit_expanded_id == sid
-            is_tasting  = st.session_state.tasting_id == sid
-
-            with st.container(border=True):
-                col1, col2, col3 = st.columns([0.08, 3.5, 1])
-
-                with col1:
-                    heart = "❤️" if spirit.get("favorite") else "🤍"
-                    if is_admin:
-                        if st.button(heart, key=f"sfav_{sid}", help="Toggle favorite"):
-                            update_spirit(sid, {"favorite": not spirit.get("favorite", False)})
-                            st.rerun()
-                    else:
-                        st.write(heart)
-
-                with col2:
-                    wishlist_badge = " 🔖" if spirit.get("wishlist") else ""
-                    st.markdown(f"**{spirit['brand']} {spirit['name']}**{wishlist_badge}")
-                    detail = spirit.get("category", "")
-                    if spirit.get("region"):
-                        detail += f" · {spirit['region']}"
-                    if spirit.get("age"):
-                        detail += f" · {spirit['age']}"
-                    if spirit.get("abv"):
-                        detail += f" · {spirit['abv']}%"
-                    st.caption(detail)
-                    if spirit.get("tried") and spirit.get("rating"):
-                        st.caption(f"{format_rating(spirit['rating'])} · Tried {spirit.get('tried_date','')}")
-
-                with col3:
-                    expand_label = "▲ Less" if is_expanded else "▼ Details"
-                    if st.button(expand_label, key=f"sexp_{sid}"):
-                        st.session_state.spirit_expanded_id = None if is_expanded else sid
-                        st.session_state.tasting_id = None
-                        st.rerun()
-
-                if is_expanded:
-                    st.divider()
-                    if spirit.get("notes"):
-                        st.markdown(f"📝 **Tasting notes:** {spirit['notes']}")
-                    if spirit.get("comments"):
-                        st.markdown(f"💬 **My comments:** {spirit['comments']}")
-                    if spirit.get("price"):
-                        st.caption(f"Price: ${spirit['price']:.2f}")
-                    if spirit.get("purchase_date"):
-                        st.caption(f"Purchased: {spirit['purchase_date']}")
-                    if spirit.get("wishlist"):
-                        st.caption("🔖 On your wishlist")
-
-                    if is_admin:
-                        col_a, col_b, col_c = st.columns(3)
-                        with col_a:
-                            if spirit.get("wishlist"):
-                                if st.button("✅ Move to Cabinet", key=f"scabinet_{sid}"):
-                                    update_spirit(sid, {"wishlist": False})
-                                    st.rerun()
-                            if not spirit.get("tried"):
-                                if st.button("🥃 Mark Tried", key=f"stried_{sid}"):
-                                    st.session_state.tasting_id = sid
-                                    st.rerun()
-                            else:
-                                if st.button("↩️ Unmark Tried", key=f"suntried_{sid}"):
-                                    update_spirit(sid, {
-                                        "tried": False,
-                                        "tried_date": "",
-                                        "rating": 0.0,
-                                        "comments": ""
-                                    })
-                                    st.rerun()
-                        with col_c:
-                            if st.button("🗑 Delete", key=f"sdel_{sid}"):
-                                delete_spirit(sid)
-                                st.session_state.spirit_expanded_id = None
-                                st.rerun()
-
-                if is_tasting and is_admin:
-                    st.divider()
-                    st.markdown("**How was it? Log your tasting:**")
-                    with st.form(f"tasting_form_{sid}"):
-                        s_rating = st.select_slider("Rating", options=HALF_STARS, value=3.0, format_func=lambda x: f"{x} ⭐")
-                        s_comments = st.text_area("Personal comments", placeholder="e.g. Incredibly smooth, notes of vanilla and oak…")
-                        tried_date = st.date_input("Date tried", value=date.today())
-                        col_save, col_cancel = st.columns(2)
-                        with col_save:
-                            save_tasting = st.form_submit_button("Save", type="primary")
-                        with col_cancel:
-                            s_cancel = st.form_submit_button("Cancel")
-                        if save_tasting:
-                            update_spirit(sid, {
-                                "tried": True,
-                                "tried_date": str(tried_date),
-                                "rating": float(s_rating),
-                                "comments": s_comments,
-                                "wishlist": False
-                            })
-                            st.session_state.tasting_id = None
-                            st.rerun()
-                        if s_cancel:
-                            st.session_state.tasting_id = None
                             st.rerun()
 
 # ─────────────────────────────────────────────────────────────────────────────
