@@ -180,11 +180,9 @@ with tab1:
 
     if is_admin:
         with st.expander("➕ Add a new cigar"):
-            if is_admin:
-                with st.expander("➕ Add a new cigar"):
-                    with st.form("lookup_form"):
-                        cigar_query = st.text_input("Search for a cigar", placeholder="e.g. Padron anniversario, rocky patel vintage, nicaraguan robusto maduro…")
-                        lookup = st.form_submit_button("🔍 Look up cigar details")
+            with st.form("lookup_form"):
+                cigar_query = st.text_input("Search for a cigar", placeholder="e.g. Padron anniversario, rocky patel vintage, nicaraguan robusto maduro…")
+                lookup = st.form_submit_button("🔍 Look up cigar details")
 
             if lookup and cigar_query:
                 with st.spinner("Finding best match..."):
