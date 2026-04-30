@@ -180,16 +180,18 @@ with tab1:
 
     if is_admin:
         with st.expander("➕ Add a new cigar"):
-        with st.form("lookup_form"):
-    cigar_query = st.text_input("Search for a cigar", placeholder="e.g. Padron anniversario, rocky patel vintage, nicaraguan robusto maduro…")
-    lookup = st.form_submit_button("🔍 Look up cigar details")
+        if is_admin:
+        with st.expander("➕ Add a new cigar"):
+            with st.form("lookup_form"):
+                cigar_query = st.text_input("Search for a cigar", placeholder="e.g. Padron anniversario, rocky patel vintage, nicaraguan robusto maduro…")
+                lookup = st.form_submit_button("🔍 Look up cigar details")
 
-if lookup and cigar_query:
-    with st.spinner("Finding best match..."):
-        try:
-            import json
-            client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
-            prompt = f"""A user is searching for a cigar with this description: "{cigar_query}"
+            if lookup and cigar_query:
+                with st.spinner("Finding best match..."):
+                    try:
+                        import json
+                        client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+                        prompt = f"""A user is searching for a cigar with this description: "{cigar_query}"
 
 Identify the most likely cigar they are referring to and return ONLY a JSON object with these exact fields, no other text:
 {{
@@ -204,31 +206,31 @@ Identify the most likely cigar they are referring to and return ONLY a JSON obje
 }}
 
 If the query is vague, return your best guess and set confidence to Low or Medium. Never return null — always make a best guess."""
-            message = client.messages.create(
-                model="claude-opus-4-6",
-                max_tokens=400,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            text = message.content[0].text.strip()
-            if text.startswith("```"):
-                text = text.split("```")[1]
-                if text.startswith("json"):
-                    text = text[4:]
-            result = json.loads(text.strip())
-            st.session_state.lookup_result = result
-            st.session_state.lookup_brand = result.get("brand", "")
-            st.session_state.lookup_name = result.get("name", "")
-            st.session_state.cigar_query = cigar_query
-            confidence = result.get("confidence", "Medium")
-            if confidence == "High":
-                st.success(f"Found: **{result.get('brand')} {result.get('name')}** — review details below.")
-            elif confidence == "Medium":
-                st.warning(f"Best match: **{result.get('brand')} {result.get('name')}** — does this look right? Edit details below or search again.")
-            else:
-                st.warning(f"Low confidence match: **{result.get('brand')} {result.get('name')}** — not sure this is right. Try a more specific search or edit details below.")
-        except Exception as e:
-            st.error(f"Lookup failed: {e}. Please try again.")
-            st.session_state.lookup_result = None
+                        message = client.messages.create(
+                            model="claude-opus-4-6",
+                            max_tokens=400,
+                            messages=[{"role": "user", "content": prompt}]
+                        )
+                        text = message.content[0].text.strip()
+                        if text.startswith("```"):
+                            text = text.split("```")[1]
+                            if text.startswith("json"):
+                                text = text[4:]
+                        result = json.loads(text.strip())
+                        st.session_state.lookup_result = result
+                        st.session_state.lookup_brand = result.get("brand", "")
+                        st.session_state.lookup_name = result.get("name", "")
+                        st.session_state.cigar_query = cigar_query
+                        confidence = result.get("confidence", "Medium")
+                        if confidence == "High":
+                            st.success(f"Found: **{result.get('brand')} {result.get('name')}** — review details below.")
+                        elif confidence == "Medium":
+                            st.warning(f"Best match: **{result.get('brand')} {result.get('name')}** — does this look right? Edit details below or search again.")
+                        else:
+                            st.warning(f"Low confidence match: **{result.get('brand')} {result.get('name')}** — not sure this is right. Try a more specific search or edit details below.")
+                    except Exception as e:
+                        st.error(f"Lookup failed: {e}. Please try again.")
+                        st.session_state.lookup_result = None
 
             if "lookup_result" in st.session_state and st.session_state.lookup_result:
                 r = st.session_state.lookup_result
