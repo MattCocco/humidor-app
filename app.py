@@ -237,18 +237,34 @@ with tab1:
 
     st.divider()
 
-    filter_opt = st.radio("Show", ["All", "In Humidor", "Smoked", "Favorites"], horizontal=True, key="cigar_filter")
-    search = st.text_input("Search", placeholder="Search by brand or name…", key="cigar_search")
+    filter_opt = st.radio("Show", ["In Humidor", "Smoked", "Favorites", "All"], horizontal=True, key="cigar_filter")
+    search = st.text_input("Search", placeholder="e.g. Padron anniversario, nicaraguan robusto…", key="cigar_search")
 
-    cigars = load_cigars()
-    if filter_opt == "In Humidor":
-        cigars = [c for c in cigars if not c["smoked"]]
-    elif filter_opt == "Smoked":
-        cigars = [c for c in cigars if c["smoked"]]
-    elif filter_opt == "Favorites":
-        cigars = [c for c in cigars if c.get("favorite")]
-    if search:
-        cigars = [c for c in cigars if search.lower() in f"{c['brand']} {c['name']}".lower()]
+cigars = load_cigars()
+if filter_opt == "In Humidor":
+    cigars = [c for c in cigars if not c["smoked"]]
+elif filter_opt == "Smoked":
+    cigars = [c for c in cigars if c["smoked"]]
+elif filter_opt == "Favorites":
+    cigars = [c for c in cigars if c.get("favorite")]
+
+if search:
+    search_terms = search.lower().split()
+    def match_score(cigar):
+        haystack = f"{cigar['brand']} {cigar['name']} {cigar['vitola']} {cigar['origin']} {cigar['wrapper']} {cigar['strength']}".lower()
+        return sum(1 for term in search_terms if term in haystack)
+    scored = [(c, match_score(c)) for c in cigars]
+    scored = [(c, s) for c, s in scored if s > 0]
+    scored.sort(key=lambda x: x[1], reverse=True)
+    if scored:
+        best_score = scored[0][1]
+        best_matches = [c for c, s in scored if s == best_score]
+        if len(best_matches) == 1 and best_score < len(search_terms):
+            st.info(f"Best match found for \"{search}\" — not quite right? Try different keywords.")
+        cigars = [c for c, s in scored]
+    else:
+        st.warning(f"No matches found for \"{search}\". Try fewer or different keywords.")
+        cigars = []
 
     if not cigars:
         st.info("No cigars found. Add one above!" if is_admin else "The humidor is empty.")
